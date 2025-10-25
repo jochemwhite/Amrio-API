@@ -1,7 +1,9 @@
 // middleware/auth.ts
 import { Context, Next } from "hono";
 import { compare } from "bcrypt";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../lib/supabase";
+
+
 
 // In-memory cache for validated keys (with TTL)
 const keyCache = new Map<
@@ -36,6 +38,13 @@ export function apiKeyAuth() {
     // Validate key format
     if (!apiKey.startsWith("cms_live_") && !apiKey.startsWith("cms_test_")) {
       return c.json({ error: "Invalid API key format" }, 401);
+    }
+
+    // CRITICAL: Validate exact key length to prevent bcrypt truncation issues
+    // Format: cms_live_ (9 chars) + base64url encoded 32 bytes (43 chars) = 52 chars total
+    const expectedLength = 52; // Adjust based on your actual key generation
+    if (apiKey.length !== expectedLength) {
+      return c.json({ error: "Invalid API key" }, 401);
     }
 
     try {
