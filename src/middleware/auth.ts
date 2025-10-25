@@ -1,6 +1,6 @@
 // middleware/auth.ts
 import { Context, Next } from "hono";
-import { compare } from "bcrypt";
+import { compare } from "bcryptjs";
 import { supabase } from "../lib/supabase";
 
 
