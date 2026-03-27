@@ -22,6 +22,7 @@ export type Database = {
           id: string
           is_active: boolean | null
           key_hash: string
+          key_length: number
           key_prefix: string
           last_used_at: string | null
           metadata: Json | null
@@ -40,6 +41,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           key_hash: string
+          key_length?: number
           key_prefix: string
           last_used_at?: string | null
           metadata?: Json | null
@@ -58,6 +60,7 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           key_hash?: string
+          key_length?: number
           key_prefix?: string
           last_used_at?: string | null
           metadata?: Json | null
@@ -207,87 +210,6 @@ export type Database = {
           },
         ]
       }
-      cms_collections_items: {
-        Row: {
-          cms_collection_entry_id: string
-          collection_id: string
-          content: Json | null
-          created_at: string
-          created_by: string | null
-          field_type: Database["public"]["Enums"]["field_type"] | null
-          id: string
-          name: string | null
-          order: number
-          parent_field_id: string | null
-          schema_field_id: string
-          updated_at: string | null
-        }
-        Insert: {
-          cms_collection_entry_id: string
-          collection_id: string
-          content?: Json | null
-          created_at?: string
-          created_by?: string | null
-          field_type?: Database["public"]["Enums"]["field_type"] | null
-          id?: string
-          name?: string | null
-          order?: number
-          parent_field_id?: string | null
-          schema_field_id: string
-          updated_at?: string | null
-        }
-        Update: {
-          cms_collection_entry_id?: string
-          collection_id?: string
-          content?: Json | null
-          created_at?: string
-          created_by?: string | null
-          field_type?: Database["public"]["Enums"]["field_type"] | null
-          id?: string
-          name?: string | null
-          order?: number
-          parent_field_id?: string | null
-          schema_field_id?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "cms_collections_items_cms_collection_entry_id_fkey"
-            columns: ["cms_collection_entry_id"]
-            isOneToOne: false
-            referencedRelation: "cms_collection_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cms_collections_items_collection_id_fkey"
-            columns: ["collection_id"]
-            isOneToOne: false
-            referencedRelation: "cms_collections"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cms_collections_items_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cms_collections_items_parent_field_id_fkey"
-            columns: ["parent_field_id"]
-            isOneToOne: false
-            referencedRelation: "cms_collections_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "cms_collections_items_schema_field_id_fkey"
-            columns: ["schema_field_id"]
-            isOneToOne: false
-            referencedRelation: "cms_schema_fields"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       cms_content_fields: {
         Row: {
           collection_id: string | null
@@ -344,6 +266,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "cms_content_fields_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "cms_content_sections"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "cms_fields_section_id_fkey"
             columns: ["section_id"]
             isOneToOne: false
@@ -354,9 +283,11 @@ export type Database = {
       }
       cms_content_sections: {
         Row: {
+          cms_collection_entry_id: string | null
           created_at: string | null
           description: string | null
           id: string
+          layout_entry_id: string | null
           name: string
           order: number | null
           page_id: string | null
@@ -364,9 +295,11 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          cms_collection_entry_id?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
+          layout_entry_id?: string | null
           name: string
           order?: number | null
           page_id?: string | null
@@ -374,9 +307,11 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          cms_collection_entry_id?: string | null
           created_at?: string | null
           description?: string | null
           id?: string
+          layout_entry_id?: string | null
           name?: string
           order?: number | null
           page_id?: string | null
@@ -384,6 +319,20 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "cms_content_sections_cms_collection_entry_id_fkey"
+            columns: ["cms_collection_entry_id"]
+            isOneToOne: false
+            referencedRelation: "cms_collection_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_content_sections_layout_entry_id_fkey"
+            columns: ["layout_entry_id"]
+            isOneToOne: false
+            referencedRelation: "cms_layout_entries"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "cms_content_sections_schema_section_id_fkey"
             columns: ["schema_section_id"]
@@ -396,6 +345,272 @@ export type Database = {
             columns: ["page_id"]
             isOneToOne: false
             referencedRelation: "cms_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cms_form_submissions: {
+        Row: {
+          content: Json
+          created_at: string
+          form_id: string
+          id: string
+          metadata: Json | null
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          form_id: string
+          id?: string
+          metadata?: Json | null
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          form_id?: string
+          id?: string
+          metadata?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cms_form_submissions_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "cms_forms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cms_forms: {
+        Row: {
+          archived_at: string | null
+          content: Json
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          name: string
+          published: boolean
+          share_url: string
+          submissions: number
+          tenant_id: string
+          updated_at: string
+          visits: number
+          website_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          content?: Json
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          name: string
+          published?: boolean
+          share_url?: string
+          submissions?: number
+          tenant_id: string
+          updated_at?: string
+          visits?: number
+          website_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          content?: Json
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          name?: string
+          published?: boolean
+          share_url?: string
+          submissions?: number
+          tenant_id?: string
+          updated_at?: string
+          visits?: number
+          website_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cms_forms_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_forms_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_forms_website_id_fkey"
+            columns: ["website_id"]
+            isOneToOne: false
+            referencedRelation: "cms_websites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cms_layout_entries: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          layout_id: string
+          name: string | null
+          type: Database["public"]["Enums"]["layout_slot_type"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          layout_id: string
+          name?: string | null
+          type: Database["public"]["Enums"]["layout_slot_type"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          layout_id?: string
+          name?: string | null
+          type?: Database["public"]["Enums"]["layout_slot_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cms_layout_entries_layout_id_fkey"
+            columns: ["layout_id"]
+            isOneToOne: false
+            referencedRelation: "cms_layouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cms_layout_overrides: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          enabled: boolean
+          id: string
+          layout_entry_id: string
+          page_id: string | null
+          priority: number
+          route_pattern: string | null
+          slot_type: Database["public"]["Enums"]["layout_slot_type"]
+          updated_at: string
+          website_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          layout_entry_id: string
+          page_id?: string | null
+          priority?: number
+          route_pattern?: string | null
+          slot_type: Database["public"]["Enums"]["layout_slot_type"]
+          updated_at?: string
+          website_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          layout_entry_id?: string
+          page_id?: string | null
+          priority?: number
+          route_pattern?: string | null
+          slot_type?: Database["public"]["Enums"]["layout_slot_type"]
+          updated_at?: string
+          website_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cms_layout_overrides_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_layout_overrides_layout_entry_id_fkey"
+            columns: ["layout_entry_id"]
+            isOneToOne: false
+            referencedRelation: "cms_layout_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_layout_overrides_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "cms_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_layout_overrides_website_id_fkey"
+            columns: ["website_id"]
+            isOneToOne: false
+            referencedRelation: "cms_websites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cms_layouts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          name: string
+          schema_id: string | null
+          updated_at: string | null
+          website_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          schema_id?: string | null
+          updated_at?: string | null
+          website_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          schema_id?: string | null
+          updated_at?: string | null
+          website_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cms_layouts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_layouts_schema_id_fkey"
+            columns: ["schema_id"]
+            isOneToOne: false
+            referencedRelation: "cms_schemas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_layouts_website_id_fkey"
+            columns: ["website_id"]
+            isOneToOne: false
+            referencedRelation: "cms_websites"
             referencedColumns: ["id"]
           },
         ]
@@ -466,12 +681,14 @@ export type Database = {
           collection_id: string | null
           created_at: string
           default_value: string | null
+          field_key: string
           id: string
           name: string
           order: number
           parent_field_id: string | null
           required: boolean
           schema_section_id: string
+          settings: Json | null
           type: Database["public"]["Enums"]["field_type"]
           updated_at: string
           validation: string | null
@@ -480,12 +697,14 @@ export type Database = {
           collection_id?: string | null
           created_at?: string
           default_value?: string | null
+          field_key: string
           id?: string
           name: string
           order?: number
           parent_field_id?: string | null
           required?: boolean
           schema_section_id: string
+          settings?: Json | null
           type: Database["public"]["Enums"]["field_type"]
           updated_at?: string
           validation?: string | null
@@ -494,12 +713,14 @@ export type Database = {
           collection_id?: string | null
           created_at?: string
           default_value?: string | null
+          field_key?: string
           id?: string
           name?: string
           order?: number
           parent_field_id?: string | null
           required?: boolean
           schema_section_id?: string
+          settings?: Json | null
           type?: Database["public"]["Enums"]["field_type"]
           updated_at?: string
           validation?: string | null
@@ -704,9 +925,11 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           download_count: number | null
+          expires_at: string | null
           file_type: string
           filename: string
           folder: string | null
+          folder_id: string | null
           height: number | null
           id: string
           last_accessed_at: string | null
@@ -718,6 +941,7 @@ export type Database = {
           tags: string[] | null
           tenant_id: string
           updated_at: string | null
+          upload_status: string
           uploaded_by: string
           used_in_fields: string[] | null
           website_id: string | null
@@ -729,9 +953,11 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           download_count?: number | null
+          expires_at?: string | null
           file_type: string
           filename: string
           folder?: string | null
+          folder_id?: string | null
           height?: number | null
           id?: string
           last_accessed_at?: string | null
@@ -743,6 +969,7 @@ export type Database = {
           tags?: string[] | null
           tenant_id: string
           updated_at?: string | null
+          upload_status?: string
           uploaded_by: string
           used_in_fields?: string[] | null
           website_id?: string | null
@@ -754,9 +981,11 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           download_count?: number | null
+          expires_at?: string | null
           file_type?: string
           filename?: string
           folder?: string | null
+          folder_id?: string | null
           height?: number | null
           id?: string
           last_accessed_at?: string | null
@@ -768,12 +997,20 @@ export type Database = {
           tags?: string[] | null
           tenant_id?: string
           updated_at?: string | null
+          upload_status?: string
           uploaded_by?: string
           used_in_fields?: string[] | null
           website_id?: string | null
           width?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "files_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "files_tenant_id_fkey"
             columns: ["tenant_id"]
@@ -790,6 +1027,74 @@ export type Database = {
           },
           {
             foreignKeyName: "files_website_id_fkey"
+            columns: ["website_id"]
+            isOneToOne: false
+            referencedRelation: "cms_websites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      folders: {
+        Row: {
+          created_at: string
+          created_by: string
+          deleted_at: string | null
+          full_path: string
+          id: string
+          name: string
+          parent_folder_id: string | null
+          slug: string
+          tenant_id: string
+          website_id: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          deleted_at?: string | null
+          full_path: string
+          id?: string
+          name: string
+          parent_folder_id?: string | null
+          slug: string
+          tenant_id: string
+          website_id: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          deleted_at?: string | null
+          full_path?: string
+          id?: string
+          name?: string
+          parent_folder_id?: string | null
+          slug?: string
+          tenant_id?: string
+          website_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "folders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folders_parent_folder_id_fkey"
+            columns: ["parent_folder_id"]
+            isOneToOne: false
+            referencedRelation: "folders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folders_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "folders_website_id_fkey"
             columns: ["website_id"]
             isOneToOne: false
             referencedRelation: "cms_websites"
@@ -1112,29 +1417,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      build_nested_content_fields_recursive: {
-        Args: { parent_field_id_param?: string; section_id_param: string }
-        Returns: Json
-      }
-      build_nested_fields_recursive: {
-        Args: { parent_field_id_param?: string; section_id_param: string }
-        Returns: Json
-      }
-      build_schema_fields_with_content: {
+      build_schema_fields_with_content_section: {
         Args: {
-          page_id_param: string
+          content_section_id_param: string
           parent_field_id_param?: string
           schema_section_id_param: string
         }
         Returns: Json
-      }
-      calculate_tenant_storage: {
-        Args: { p_tenant_id: string }
-        Returns: number
-      }
-      can_tenant_upload_file: {
-        Args: { p_file_size: number; p_tenant_id: string }
-        Returns: boolean
       }
       create_user_profile_and_assign_role: {
         Args: {
@@ -1146,81 +1435,54 @@ export type Database = {
         }
         Returns: boolean
       }
-      format_file_size: { Args: { size_bytes: number }; Returns: string }
-      get_all_users_with_roles: { Args: never; Returns: Json[] }
-      get_collection_with_schema: {
-        Args: { p_collection_id: string; p_tenant_id: string }
+      decrement_storage_used: {
+        Args: { p_bytes: number; p_tenant_id: string }
+        Returns: undefined
+      }
+      generate_api_key: {
+        Args: {
+          p_created_by: string
+          p_environment: string
+          p_expires_at: string
+          p_metadata: Json
+          p_name: string
+          p_rate_limit: number
+          p_scopes: Json
+          p_tenant_id: string
+          p_website_id: string
+        }
         Returns: Json
       }
-      get_file_extension: { Args: { filename: string }; Returns: string }
-      get_file_type: { Args: { mime_type: string }; Returns: string }
-      get_or_create_content_section: {
-        Args: { page_id_param: string; schema_section_id_param: string }
-        Returns: string
-      }
-      get_page: {
-        Args: { page_id_param: string }
-        Returns: {
-          created_at: string
-          description: string
-          id: string
-          name: string
-          schema_description: string
-          schema_id: string
-          schema_name: string
-          schema_template: boolean
-          sections: Json
-          slug: string
-          status: Database["public"]["Enums"]["page_status"]
-          updated_at: string
-          website_id: string
-        }[]
-      }
-      get_page_content: {
-        Args: { page_id_param: string; website_id_param: string }
-        Returns: {
-          id: string
-          sections: Json
-          slug: string
-        }[]
-      }
-      get_user_session:
-        | { Args: { p_uid: string }; Returns: Json }
-        | { Args: never; Returns: Json }
-      has_global_role:
-        | { Args: { role_name_input: string; uid: string }; Returns: boolean }
-        | { Args: { role_name_input: string }; Returns: boolean }
-      initialize_collection_entry_content: {
+      get_content: {
         Args: {
-          collection_id_param: string
-          entry_id_param: string
+          create_missing_sections_param?: boolean
+          entity_id_param: string
+          entity_type_param: string
+          tenant_id_param?: string
+        }
+        Returns: Json
+      }
+      get_user_session: {
+        Args: { p_active_tenant_id?: string; p_uid: string }
+        Returns: Json
+      }
+      has_global_role: {
+        Args: { role_name_input: string; uid: string }
+        Returns: boolean
+      }
+      increment_storage_used: {
+        Args: { p_bytes: number; p_tenant_id: string }
+        Returns: undefined
+      }
+      update_schema_structure_tx: {
+        Args: {
+          payload_param: Json
           schema_id_param: string
+          tenant_id_param: string
         }
         Returns: undefined
       }
-      initialize_page_content: {
-        Args: { page_id_param: string; schema_id_param: string }
-        Returns: undefined
-      }
-      migrate_existing_content_to_schemas: { Args: never; Returns: undefined }
-      revoke_global_role: {
-        Args: { role_name_input: string; user_id_input: string }
-        Returns: undefined
-      }
-      save_page_content: {
-        Args: { field_updates: Json; page_id_param: string }
-        Returns: undefined
-      }
-      set_system_admin: { Args: { user_id_input: string }; Returns: undefined }
-      sync_schema_changes: {
-        Args: { schema_id_param: string }
-        Returns: {
-          changes_applied: number
-          updated_id: string
-          updated_name: string
-          updated_type: string
-        }[]
-      }
+      user_belongs_to_tenant: { Args: { tenant_id: string }; Returns: boolean }
     }
     Enums: {
       field_type:
@@ -1233,9 +1495,13 @@ export type Database = {
         | "reference"
         | "section"
         | "video"
+        | "button"
+        | "social_media"
+        | "navigation_menu"
       global_roles: "default_user" | "system_admin"
+      layout_slot_type: "header" | "footer" | "sidebar" | "custom"
       page_status: "draft" | "active" | "archived"
-      schema_type: "page" | "collection"
+      schema_type: "page" | "collection" | "layout"
       subscription_status:
         | "trialing"
         | "active"
@@ -1390,10 +1656,14 @@ export const Constants = {
         "reference",
         "section",
         "video",
+        "button",
+        "social_media",
+        "navigation_menu",
       ],
       global_roles: ["default_user", "system_admin"],
+      layout_slot_type: ["header", "footer", "sidebar", "custom"],
       page_status: ["draft", "active", "archived"],
-      schema_type: ["page", "collection"],
+      schema_type: ["page", "collection", "layout"],
       subscription_status: [
         "trialing",
         "active",

@@ -107,6 +107,157 @@ cmsRoutes.get(
   }
 )
 
+// Get complete page data including content, layout, and collection data
+cmsRoutes.get(
+  '/websites/:websiteId/pages/:pageId/full',
+  zValidator('param', pageParamsSchema),
+  async (c) => {
+    try {
+      const { websiteId, pageId } = c.req.valid('param')
+      const fullPageData = await cmsService.getFullPageData(websiteId, pageId)
+
+      if (!fullPageData) {
+        return c.json({
+          success: false,
+          error: 'Page not found'
+        }, 404)
+      }
+
+      return c.json({
+        success: true,
+        data: fullPageData
+      })
+    } catch (error) {
+      console.error('Error fetching full page data:', error)
+      return c.json({
+        success: false,
+        error: 'Failed to fetch full page data'
+      }, 500)
+    }
+  }
+)
+
+// Get complete page data by slug including content, layout, and collection data
+cmsRoutes.get(
+  '/websites/:websiteId/pages/slug/:slug/full',
+  zValidator('param', pageBySlugParamsSchema),
+  async (c) => {
+    try {
+      const { websiteId, slug } = c.req.valid('param')
+      const pageWithLayout = await cmsService.getPageWithLayoutBySlug(websiteId, slug)
+
+      if (!pageWithLayout) {
+        return c.json({
+          success: false,
+          error: 'Page not found'
+        }, 404)
+      }
+
+      const [pageContent, pageCollectionData] = await Promise.all([
+        cmsService.getPageContentBySlug(websiteId, slug),
+        cmsService.getPageCollectionData(pageWithLayout.page.id)
+      ])
+
+      if (!pageContent) {
+        return c.json({
+          success: false,
+          error: 'Page not found'
+        }, 404)
+      }
+
+      const collectionSectionsById = new Map(
+        pageCollectionData.sections.map((section) => [section.id, section])
+      )
+
+      return c.json({
+        success: true,
+        data: {
+          page: pageContent.page,
+          sections: pageContent.sections.map((section) => {
+            const collectionSection = collectionSectionsById.get(section.id)
+
+            return {
+              ...section,
+              fields: collectionSection?.fields ?? section.fields,
+              collectionEntry: collectionSection?.collectionEntry ?? null,
+              collection: collectionSection?.collection ?? null,
+            }
+          }),
+          layout: pageWithLayout.layout
+        }
+      })
+    } catch (error) {
+      console.error('Error fetching full page data by slug:', error)
+      return c.json({
+        success: false,
+        error: 'Failed to fetch full page data'
+      }, 500)
+    }
+  }
+)
+
+// Get page layout data
+cmsRoutes.get(
+  '/websites/:websiteId/pages/:pageId/layout',
+  zValidator('param', pageParamsSchema),
+  async (c) => {
+    try {
+      const { websiteId, pageId } = c.req.valid('param')
+      const pageLayout = await cmsService.getPageWithLayout(websiteId, pageId)
+
+      if (!pageLayout) {
+        return c.json({
+          success: false,
+          error: 'Page not found'
+        }, 404)
+      }
+
+      return c.json({
+        success: true,
+        data: pageLayout
+      })
+    } catch (error) {
+      console.error('Error fetching page layout:', error)
+      return c.json({
+        success: false,
+        error: 'Failed to fetch page layout'
+      }, 500)
+    }
+  }
+)
+
+// Get page collection data
+cmsRoutes.get(
+  '/websites/:websiteId/pages/:pageId/collections',
+  zValidator('param', pageParamsSchema),
+  async (c) => {
+    try {
+      const { websiteId, pageId } = c.req.valid('param')
+      const page = await cmsService.getPageWithLayout(websiteId, pageId)
+
+      if (!page) {
+        return c.json({
+          success: false,
+          error: 'Page not found'
+        }, 404)
+      }
+
+      const collectionData = await cmsService.getPageCollectionData(pageId)
+
+      return c.json({
+        success: true,
+        data: collectionData
+      })
+    } catch (error) {
+      console.error('Error fetching page collection data:', error)
+      return c.json({
+        success: false,
+        error: 'Failed to fetch page collection data'
+      }, 500)
+    }
+  }
+)
+
 // Get website information
 cmsRoutes.get(
   '/websites/:websiteId',
