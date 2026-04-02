@@ -24,6 +24,12 @@ const collectionIdParamsSchema = z.object({
   collectionId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i, 'Invalid collection ID format')
 })
 
+const collectionSlugParamsSchema = z.object({
+  websiteId: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i, 'Invalid website ID format'),
+  prefixSlug: z.string().min(1, 'Collection prefix slug is required'),
+  entrySlug: z.string().min(1, 'Collection entry slug is required')
+})
+
 // Get all pages for a website
 cmsRoutes.get(
   '/websites/:websiteId/pages',
@@ -312,6 +318,35 @@ cmsRoutes.get('/collections/:collectionId/items',
     data: items
   })
 })
+
+cmsRoutes.get(
+  '/websites/:websiteId/collections/:prefixSlug/:entrySlug',
+  zValidator('param', collectionSlugParamsSchema),
+  async (c) => {
+    try {
+      const { websiteId, prefixSlug, entrySlug } = c.req.valid('param')
+      const collectionEntry = await cmsService.getCollectionEntryBySlug(websiteId, prefixSlug, entrySlug)
+
+      if (!collectionEntry) {
+        return c.json({
+          success: false,
+          error: 'Collection entry not found'
+        }, 404)
+      }
+
+      return c.json({
+        success: true,
+        data: collectionEntry
+      })
+    } catch (error) {
+      console.error('Error fetching collection entry by slug:', error)
+      return c.json({
+        success: false,
+        error: 'Failed to fetch collection entry'
+      }, 500)
+    }
+  }
+)
 
 // Health check endpoint
 cmsRoutes.get('/health', (c) => {

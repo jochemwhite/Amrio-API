@@ -12,6 +12,25 @@ type CmsSchemaSection = Tables<'cms_schema_sections'>
 type CmsLayout = Tables<'cms_layouts'>
 type CmsLayoutEntry = Tables<'cms_layout_entries'>
 type CmsLayoutOverride = Tables<'cms_layout_overrides'>
+type CmsPageRow = CmsPage & {
+  cms_content_sections?: CmsContentSectionRow[] | null
+}
+type CmsContentFieldRow = CmsContentField & {
+  cms_schema_fields?: CmsSchemaField | CmsSchemaField[] | null
+}
+type CmsContentSectionRow = CmsContentSection & {
+  cms_schema_sections?: CmsSchemaSection | CmsSchemaSection[] | null
+  cms_content_fields?: CmsContentFieldRow[] | null
+}
+type CmsCollectionEntryRow = CmsCollectionEntry & {
+  cms_collections?: CmsCollection | CmsCollection[] | null
+}
+type CmsLayoutEntryRow = CmsLayoutEntry & {
+  cms_layouts?: CmsLayout | CmsLayout[] | null
+}
+type CmsLayoutOverrideRow = CmsLayoutOverride & {
+  cms_layout_entries?: CmsLayoutEntryRow | CmsLayoutEntryRow[] | null
+}
 
 type PageSummary = Pick<CmsPage, 'id' | 'slug' | 'name' | 'status'>
 type ContentFieldResponse = Pick<CmsContentField, 'id' | 'type' | 'order'> & {
@@ -66,6 +85,18 @@ const COLLECTIONS_SELECT = `
   cms_collection_entries (*)
 `
 
+function getSingleRelation<T>(value: T | T[] | null | undefined): T | null {
+  if (Array.isArray(value)) {
+    return value[0] ?? null
+  }
+
+  return value ?? null
+}
+
+function createEmptyResult<T>() {
+  return Promise.resolve({ data: [] as T[], error: null })
+}
+
 function normalizeRouteCandidates(slug: string) {
   const baseSlug = slug.startsWith('/') ? slug : `/${slug}`
   const trimmed = baseSlug.replace(/\/+$/, '') || '/'
@@ -76,6 +107,22 @@ function normalizeRouteCandidates(slug: string) {
     trimmed,
     `${trimmed}/`,
   ]))
+}
+
+function normalizeSlugSegment(value: string) {
+  return value.replace(/^\/+|\/+$/g, '')
+}
+
+function getSlugSegmentCandidates(value: string) {
+  const normalized = normalizeSlugSegment(value)
+
+  return Array.from(new Set([
+    value,
+    normalized,
+    `/${normalized}`,
+    `${normalized}/`,
+    `/${normalized}/`,
+  ].filter((candidate) => candidate.length > 0)))
 }
 
 function routePatternMatchesSlug(routePattern: string | null, slug: string) {
@@ -147,25 +194,20 @@ async function getResolvedLayoutOverrides(page: CmsPage) {
     throw error
   }
 
-  const matched = (data ?? [])
+  const matched = ((data ?? []) as CmsLayoutOverrideRow[])
     .filter((override) => {
       const pageMatch = override.page_id === page.id
       const routeMatch = routePatternMatchesSlug(override.route_pattern, page.slug)
       return pageMatch || routeMatch
     })
     .map((override) => {
-      const layoutEntry = Array.isArray(override.cms_layout_entries)
-        ? override.cms_layout_entries[0] ?? null
-        : override.cms_layout_entries ?? null
-
-      const layout = layoutEntry && Array.isArray(layoutEntry.cms_layouts)
-        ? layoutEntry.cms_layouts[0] ?? null
-        : layoutEntry?.cms_layouts ?? null
+      const layoutEntry = getSingleRelation(override.cms_layout_entries)
+      const layout = getSingleRelation(layoutEntry?.cms_layouts)
 
       const normalizedOverride: PageLayoutOverride = {
-        ...(override as CmsLayoutOverride),
-        layoutEntry: layoutEntry as CmsLayoutEntry | null,
-        layout: layout as CmsLayout | null,
+        ...override,
+        layoutEntry,
+        layout,
       }
 
       return normalizedOverride
@@ -174,21 +216,21 @@ async function getResolvedLayoutOverrides(page: CmsPage) {
   return matched
 }
 
-function mapPageSections(page: any): PageSection[] {
+function mapSectionField(field: CmsContentFieldRow): SectionField {
+  return {
+    ...field,
+    schemaField: getSingleRelation(field.cms_schema_fields),
+  }
+}
+
+function mapPageSections(page: CmsPageRow): PageSection[] {
   const sections = Array.isArray(page?.cms_content_sections) ? page.cms_content_sections : []
 
-  return sections.map((section: any) => ({
-    ...(section as CmsContentSection),
-    schemaSection: Array.isArray(section.cms_schema_sections)
-      ? section.cms_schema_sections[0] ?? null
-      : section.cms_schema_sections ?? null,
+  return sections.map((section) => ({
+    ...section,
+    schemaSection: getSingleRelation(section.cms_schema_sections),
     fields: (Array.isArray(section.cms_content_fields) ? section.cms_content_fields : [])
-      .map((field: any) => ({
-        ...(field as CmsContentField),
-        schemaField: Array.isArray(field.cms_schema_fields)
-          ? field.cms_schema_fields[0] ?? null
-          : field.cms_schema_fields ?? null,
-      }))
+      .map(mapSectionField)
       .sort((a: SectionField, b: SectionField) => (a.order ?? 0) - (b.order ?? 0)),
   })).sort((a: PageSection, b: PageSection) => (a.order ?? 0) - (b.order ?? 0))
 }
@@ -266,7 +308,7 @@ async function resolveReferenceFieldContent(sections: Array<{ fields: SectionFie
           `)
           .in('collection_id', allCollectionIds)
           .order('created_at', { ascending: true })
-      : Promise.resolve({ data: [], error: null }),
+      : createEmptyResult<CmsCollectionEntryRow>(),
     specificEntryIds.length > 0
       ? supabase
           .from('cms_collection_entries')
@@ -276,7 +318,7 @@ async function resolveReferenceFieldContent(sections: Array<{ fields: SectionFie
           `)
           .in('id', specificEntryIds)
           .order('created_at', { ascending: true })
-      : Promise.resolve({ data: [], error: null }),
+      : createEmptyResult<CmsCollectionEntryRow>(),
   ])
 
   if (allEntriesResult.error) {
@@ -290,18 +332,16 @@ async function resolveReferenceFieldContent(sections: Array<{ fields: SectionFie
   const rawEntries = [...(allEntriesResult.data ?? []), ...(specificEntriesResult.data ?? [])]
   const entryRowsById = new Map<string, { entry: CmsCollectionEntry; collection: CmsCollection | null }>()
 
-  for (const rawEntry of rawEntries) {
+  for (const rawEntry of rawEntries as CmsCollectionEntryRow[]) {
     if (entryRowsById.has(rawEntry.id)) {
       continue
     }
 
-    const collection = Array.isArray(rawEntry.cms_collections)
-      ? rawEntry.cms_collections[0] ?? null
-      : rawEntry.cms_collections ?? null
+    const collection = getSingleRelation(rawEntry.cms_collections)
 
     entryRowsById.set(rawEntry.id, {
-      entry: rawEntry as CmsCollectionEntry,
-      collection: collection as CmsCollection | null,
+      entry: rawEntry,
+      collection,
     })
   }
 
@@ -328,9 +368,9 @@ async function resolveReferenceFieldContent(sections: Array<{ fields: SectionFie
   }
 
   const sectionsByEntryId = new Map<string, ContentSectionResponse[]>()
-  const groupedRawSections = new Map<string, any[]>()
+  const groupedRawSections = new Map<string, CmsContentSectionRow[]>()
 
-  for (const rawSection of rawSections ?? []) {
+  for (const rawSection of (rawSections ?? []) as CmsContentSectionRow[]) {
     const entryId = rawSection.cms_collection_entry_id
 
     if (!entryId) {
@@ -342,7 +382,7 @@ async function resolveReferenceFieldContent(sections: Array<{ fields: SectionFie
     groupedRawSections.set(entryId, existingSections)
   }
 
-  for (const [entryId, entrySections] of groupedRawSections.entries()) {
+  groupedRawSections.forEach((entrySections, entryId) => {
     const canonicalSections = entrySections.some((section) => section.page_id === null)
       ? entrySections.filter((section) => section.page_id === null)
       : entrySections
@@ -350,12 +390,7 @@ async function resolveReferenceFieldContent(sections: Array<{ fields: SectionFie
     const mappedSections = canonicalSections
       .map((section) => {
         const fields = (Array.isArray(section.cms_content_fields) ? section.cms_content_fields : [])
-          .map((field: any) => ({
-            ...(field as CmsContentField),
-            schemaField: Array.isArray(field.cms_schema_fields)
-              ? field.cms_schema_fields[0] ?? null
-              : field.cms_schema_fields ?? null,
-          }))
+          .map(mapSectionField)
           .sort((a: SectionField, b: SectionField) => (a.order ?? 0) - (b.order ?? 0))
 
         return mapContentSection({
@@ -368,19 +403,19 @@ async function resolveReferenceFieldContent(sections: Array<{ fields: SectionFie
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
 
     sectionsByEntryId.set(entryId, mappedSections)
-  }
+  })
 
   const entriesByCollectionId = new Map<string, ContentSectionResponse[][]>()
   const entrySectionsById = new Map<string, ContentSectionResponse[]>()
 
-  for (const [entryId, { entry }] of entryRowsById.entries()) {
+  entryRowsById.forEach(({ entry }, entryId) => {
     const resolvedSections = sectionsByEntryId.get(entryId) ?? []
     entrySectionsById.set(entryId, resolvedSections)
 
     const collectionEntries = entriesByCollectionId.get(entry.collection_id) ?? []
     collectionEntries.push(resolvedSections)
     entriesByCollectionId.set(entry.collection_id, collectionEntries)
-  }
+  })
 
   const resolvedContentByFieldId = new Map<string, ContentSectionResponse[]>()
 
@@ -428,6 +463,37 @@ function mapContentSection(
       .map((field) => mapContentField(field, resolvedReferenceContentByFieldId))
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   }
+}
+
+async function getCollectionEntrySections(entryId: string) {
+  const { data, error } = await supabase
+    .from('cms_content_sections')
+    .select(`
+      *,
+      cms_content_fields:cms_content_fields!cms_content_fields_section_id_fkey (
+        *,
+        cms_schema_fields (*)
+      )
+    `)
+    .eq('cms_collection_entry_id', entryId)
+    .order('order', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  const sections = ((data ?? []) as CmsContentSectionRow[])
+    .map((section) => ({
+      ...section,
+      fields: (Array.isArray(section.cms_content_fields) ? section.cms_content_fields : [])
+        .map(mapSectionField)
+        .sort((a: SectionField, b: SectionField) => (a.order ?? 0) - (b.order ?? 0)),
+    }))
+    .sort((a: PageCollectionSection, b: PageCollectionSection) => (a.order ?? 0) - (b.order ?? 0))
+
+  const resolvedReferenceContentByFieldId = await resolveReferenceFieldContent(sections)
+
+  return sections.map((section) => mapContentSection(section, resolvedReferenceContentByFieldId))
 }
 
 export const cmsService = {
@@ -495,7 +561,7 @@ export const cmsService = {
       throw error
     }
 
-    return data as CmsWebsite
+    return data
   },
 
   async getCollections() {
@@ -523,6 +589,47 @@ export const cmsService = {
     }
 
     return data ?? []
+  },
+
+  async getCollectionEntryBySlug(websiteId: string, prefixSlug: string, entrySlug: string) {
+    const normalizedEntrySlug = normalizeSlugSegment(entrySlug)
+    const prefixCandidates = getSlugSegmentCandidates(prefixSlug)
+    const entryCandidates = getSlugSegmentCandidates(normalizedEntrySlug)
+
+    const { data, error } = await supabase
+      .from('cms_collection_entries')
+      .select(`
+        *,
+        cms_collections!inner (*)
+      `)
+      .eq('cms_collections.website_id', websiteId)
+      .in('cms_collections.slug_prefix', prefixCandidates)
+      .in('slug', entryCandidates)
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      throw error
+    }
+
+    if (!data) {
+      return null
+    }
+
+    const entry = data as CmsCollectionEntryRow
+    const collection = getSingleRelation(entry.cms_collections)
+
+    if (!collection) {
+      return null
+    }
+
+    const { cms_collections: _cmsCollections, ...entryData } = entry
+    const sections = await getCollectionEntrySections(entry.id)
+
+    return {
+      entry: entryData,
+      sections,
+    }
   },
 
   async getPageWithLayout(websiteId: string, pageId: string) {
@@ -585,7 +692,7 @@ export const cmsService = {
             `)
             .in('section_id', sectionIds)
             .order('order', { ascending: true })
-        : Promise.resolve({ data: [], error: null }),
+        : createEmptyResult<CmsContentFieldRow>(),
       collectionEntryIds.length > 0
         ? supabase
             .from('cms_collection_entries')
@@ -594,7 +701,7 @@ export const cmsService = {
               cms_collections (*)
             `)
             .in('id', collectionEntryIds)
-        : Promise.resolve({ data: [], error: null }),
+        : createEmptyResult<CmsCollectionEntryRow>(),
     ])
 
     if (fieldsResult.error) {
@@ -607,13 +714,8 @@ export const cmsService = {
 
     const fieldsBySection = new Map<string, SectionField[]>()
 
-    for (const rawField of fieldsResult.data ?? []) {
-      const field: SectionField = {
-        ...(rawField as CmsContentField),
-        schemaField: Array.isArray(rawField.cms_schema_fields)
-          ? rawField.cms_schema_fields[0] ?? null
-          : rawField.cms_schema_fields ?? null,
-      }
+    for (const rawField of (fieldsResult.data ?? []) as CmsContentFieldRow[]) {
+      const field = mapSectionField(rawField)
 
       const existingFields = fieldsBySection.get(field.section_id) ?? []
       existingFields.push(field)
@@ -622,14 +724,12 @@ export const cmsService = {
 
     const collectionEntryById = new Map<string, { entry: CmsCollectionEntry; collection: CmsCollection | null }>()
 
-    for (const rawEntry of collectionEntriesResult.data ?? []) {
-      const collection = Array.isArray(rawEntry.cms_collections)
-        ? rawEntry.cms_collections[0] ?? null
-        : rawEntry.cms_collections ?? null
+    for (const rawEntry of (collectionEntriesResult.data ?? []) as CmsCollectionEntryRow[]) {
+      const collection = getSingleRelation(rawEntry.cms_collections)
 
       collectionEntryById.set(rawEntry.id, {
-        entry: rawEntry as CmsCollectionEntry,
-        collection: collection as CmsCollection | null,
+        entry: rawEntry,
+        collection,
       })
     }
 

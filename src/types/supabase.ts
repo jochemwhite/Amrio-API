@@ -135,18 +135,21 @@ export type Database = {
           created_at: string
           id: string
           name: string | null
+          slug: string | null
         }
         Insert: {
           collection_id: string
           created_at?: string
           id?: string
           name?: string | null
+          slug?: string | null
         }
         Update: {
           collection_id?: string
           created_at?: string
           id?: string
           name?: string | null
+          slug?: string | null
         }
         Relationships: [
           {
@@ -166,6 +169,7 @@ export type Database = {
           id: string
           name: string
           schema_id: string | null
+          slug_prefix: string | null
           website_id: string | null
         }
         Insert: {
@@ -175,6 +179,7 @@ export type Database = {
           id?: string
           name: string
           schema_id?: string | null
+          slug_prefix?: string | null
           website_id?: string | null
         }
         Update: {
@@ -184,6 +189,7 @@ export type Database = {
           id?: string
           name?: string
           schema_id?: string | null
+          slug_prefix?: string | null
           website_id?: string | null
         }
         Relationships: [
@@ -1474,6 +1480,7 @@ export type Database = {
         Args: { p_bytes: number; p_tenant_id: string }
         Returns: undefined
       }
+      is_tenant_member: { Args: { p_tenant_id: string }; Returns: boolean }
       update_schema_structure_tx: {
         Args: {
           payload_param: Json
