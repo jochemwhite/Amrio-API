@@ -7,6 +7,7 @@ type CmsContentSection = Tables<'cms_content_sections'>
 type CmsContentField = Tables<'cms_content_fields'>
 type CmsCollection = Tables<'cms_collections'>
 type CmsCollectionEntry = Tables<'cms_collection_entries'>
+type CmsPageMetadata = Tables<'cms_page_metadata'>
 type CmsSchemaField = Tables<'cms_schema_fields'>
 type CmsSchemaSection = Tables<'cms_schema_sections'>
 type CmsLayout = Tables<'cms_layouts'>
@@ -33,11 +34,16 @@ type CmsLayoutOverrideRow = CmsLayoutOverride & {
 }
 
 type PageSummary = Pick<CmsPage, 'id' | 'slug' | 'name' | 'status'>
+type LayoutSummary = Pick<CmsLayout, 'id' | 'name'>
 type ContentFieldResponse = Pick<CmsContentField, 'id' | 'type' | 'order'> & {
   content: CmsContentField['content'] | ContentSectionResponse[]
   field_key: string | null
 }
-type ContentSectionResponse = Pick<CmsContentSection, 'id' | 'name' | 'order'> & {
+type ContentSectionResponse = {
+  id: string
+  name: string
+  type: string
+  order: number | null
   fields: ContentFieldResponse[]
 }
 
@@ -58,7 +64,13 @@ type PageCollectionSection = CmsContentSection & {
 
 type PageLayoutOverride = CmsLayoutOverride & {
   layoutEntry: CmsLayoutEntry | null
-  layout: CmsLayout | null
+  layout: LayoutSummary | null
+}
+
+type PageLayoutEntry = {
+  id: string | null
+  name: string | null
+  sections: ContentSectionResponse[]
 }
 
 type ReferenceFieldConfig = {
@@ -172,6 +184,20 @@ async function getPageBySlug(websiteId: string, slug: string) {
   return data
 }
 
+async function getPageMetadata(pageId: string) {
+  const { data, error } = await supabase
+    .from('cms_page_metadata')
+    .select('*')
+    .eq('page_id', pageId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  return data as CmsPageMetadata | null
+}
+
 async function getResolvedLayoutOverrides(page: CmsPage) {
   if (!page.website_id) {
     return []
@@ -207,13 +233,120 @@ async function getResolvedLayoutOverrides(page: CmsPage) {
       const normalizedOverride: PageLayoutOverride = {
         ...override,
         layoutEntry,
-        layout,
+        layout: mapLayoutSummary(layout),
       }
 
       return normalizedOverride
     })
 
   return matched
+}
+
+async function getLayoutEntriesByWebsite(websiteId: string, options?: { pageId?: string; defaultOnly?: boolean }) {
+  const { data, error } = await supabase
+    .from('cms_content_sections')
+    .select(`
+      *,
+      cms_content_fields:cms_content_fields!cms_content_fields_section_id_fkey (
+        *,
+        cms_schema_fields (*)
+      ),
+      cms_layout_entries (
+        *,
+        cms_layouts (*)
+      )
+    `)
+    .or(options?.pageId ? `page_id.eq.${options.pageId},page_id.is.null` : 'page_id.is.null')
+    .not('layout_entry_id', 'is', null)
+    .order('order', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  const sections = ((data ?? []) as Array<CmsContentSectionRow & {
+    cms_layout_entries?: CmsLayoutEntryRow | CmsLayoutEntryRow[] | null
+  }>)
+    .filter((section) => {
+      const layoutEntry = getSingleRelation(section.cms_layout_entries)
+      const layout = getSingleRelation(layoutEntry?.cms_layouts)
+
+      if (layout?.website_id !== websiteId) {
+        return false
+      }
+
+      if (options?.defaultOnly && !layoutEntry?.is_default) {
+        return false
+      }
+
+      return true
+    })
+    .map((section) => ({
+      ...section,
+      fields: (Array.isArray(section.cms_content_fields) ? section.cms_content_fields : [])
+        .map(mapSectionField)
+        .sort((a: SectionField, b: SectionField) => (a.order ?? 0) - (b.order ?? 0)),
+    }))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+
+  const groupedSections = new Map<string, typeof sections>()
+
+  for (const section of sections) {
+    const layoutEntryId = section.layout_entry_id
+
+    if (!layoutEntryId) {
+      continue
+    }
+
+    const existingSections = groupedSections.get(layoutEntryId) ?? []
+    existingSections.push(section)
+    groupedSections.set(layoutEntryId, existingSections)
+  }
+
+  const selectedSections = Array.from(groupedSections.values()).flatMap((entrySections) => {
+    if (!options?.pageId) {
+      return entrySections
+    }
+
+    const pageSpecificSections = entrySections.filter((section) => section.page_id === options.pageId)
+    return pageSpecificSections.length > 0 ? pageSpecificSections : entrySections
+  })
+
+  const resolvedReferenceContentByFieldId = await resolveReferenceFieldContent(selectedSections)
+  const entriesById = new Map<string, PageLayoutEntry>()
+
+  for (const section of selectedSections) {
+    const layoutEntryId = section.layout_entry_id
+
+    if (!layoutEntryId) {
+      continue
+    }
+
+    const relatedEntry = getSingleRelation(section.cms_layout_entries)
+    const existingEntry = entriesById.get(layoutEntryId)
+    const mappedSection = mapContentSection(section, resolvedReferenceContentByFieldId)
+
+    if (existingEntry) {
+      existingEntry.sections.push(mappedSection)
+      continue
+    }
+
+    entriesById.set(layoutEntryId, {
+      id: relatedEntry?.cms_layouts ? getSingleRelation(relatedEntry.cms_layouts)?.id ?? null : null,
+      name: relatedEntry?.cms_layouts ? getSingleRelation(relatedEntry.cms_layouts)?.name ?? null : null,
+      sections: [mappedSection],
+    })
+  }
+
+  return Array.from(entriesById.values()).sort((a, b) => {
+    const left = a.name ?? a.id ?? ''
+    const right = b.name ?? b.id ?? ''
+    return left.localeCompare(right)
+  })
+}
+
+async function getPageLayoutEntries(page: CmsPage) {
+  return getLayoutEntriesByWebsite(page.website_id ?? '', { pageId: page.id })
 }
 
 function mapSectionField(field: CmsContentFieldRow): SectionField {
@@ -396,6 +529,7 @@ async function resolveReferenceFieldContent(sections: Array<{ fields: SectionFie
         return mapContentSection({
           id: section.id,
           name: section.name,
+          type: section.type,
           order: section.order,
           fields,
         })
@@ -441,6 +575,17 @@ function mapPageSummary(page: CmsPage): PageSummary {
   }
 }
 
+function mapLayoutSummary(layout: CmsLayout | null): LayoutSummary | null {
+  if (!layout) {
+    return null
+  }
+
+  return {
+    id: layout.id,
+    name: layout.name,
+  }
+}
+
 function mapContentField(field: CmsContentField | SectionField, resolvedReferenceContentByFieldId?: Map<string, ContentSectionResponse[]>): ContentFieldResponse {
   return {
     id: field.id,
@@ -452,12 +597,13 @@ function mapContentField(field: CmsContentField | SectionField, resolvedReferenc
 }
 
 function mapContentSection(
-  section: { id: string; name: string; order: number | null; fields: CmsContentField[] | SectionField[] },
+  section: { id: string; name: string; type?: string | null; order: number | null; fields: CmsContentField[] | SectionField[] },
   resolvedReferenceContentByFieldId?: Map<string, ContentSectionResponse[]>
 ): ContentSectionResponse {
   return {
     id: section.id,
     name: section.name,
+    type: section.type ?? 'section',
     order: section.order,
     fields: section.fields
       .map((field) => mapContentField(field, resolvedReferenceContentByFieldId))
@@ -639,11 +785,15 @@ export const cmsService = {
       return null
     }
 
-    const overrides = await getResolvedLayoutOverrides(page)
+    const [entries, overrides] = await Promise.all([
+      getPageLayoutEntries(page),
+      getResolvedLayoutOverrides(page),
+    ])
 
     return {
       page: mapPageSummary(page),
       layout: {
+        entries,
         overrides,
       },
     }
@@ -656,12 +806,27 @@ export const cmsService = {
       return null
     }
 
-    const overrides = await getResolvedLayoutOverrides(page)
+    const [entries, overrides] = await Promise.all([
+      getPageLayoutEntries(page),
+      getResolvedLayoutOverrides(page),
+    ])
 
     return {
       page: mapPageSummary(page),
       layout: {
+        entries,
         overrides,
+      },
+    }
+  },
+
+  async getDefaultLayouts(websiteId: string) {
+    const entries = await getLayoutEntriesByWebsite(websiteId)
+
+    return {
+      layout: {
+        entries,
+        overrides: [],
       },
     }
   },
@@ -758,10 +923,11 @@ export const cmsService = {
   },
 
   async getFullPageData(websiteId: string, pageId: string) {
-    const [pageContent, pageWithLayout, pageCollectionData] = await Promise.all([
+    const [pageContent, pageWithLayout, pageCollectionData, metadata] = await Promise.all([
       this.getPageContent(websiteId, pageId),
       this.getPageWithLayout(websiteId, pageId),
       this.getPageCollectionData(pageId),
+      getPageMetadata(pageId),
     ])
 
     if (!pageContent || !pageWithLayout) {
@@ -773,7 +939,10 @@ export const cmsService = {
     )
 
     return {
-      page: pageContent.page,
+      page: {
+        ...pageContent.page,
+        metadata,
+      },
       sections: pageContent.sections.map((section) => {
         const collectionSection = collectionSectionsById.get(section.id)
 
@@ -786,5 +955,15 @@ export const cmsService = {
       }),
       layout: pageWithLayout.layout,
     }
+  },
+
+  async getFullPageDataBySlug(websiteId: string, slug: string) {
+    const page = await getPageBySlug(websiteId, slug)
+
+    if (!page) {
+      return null
+    }
+
+    return this.getFullPageData(websiteId, page.id)
   },
 }

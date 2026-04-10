@@ -150,47 +150,18 @@ cmsRoutes.get(
   async (c) => {
     try {
       const { websiteId, slug } = c.req.valid('param')
-      const pageWithLayout = await cmsService.getPageWithLayoutBySlug(websiteId, slug)
+      const fullPageData = await cmsService.getFullPageDataBySlug(websiteId, slug)
 
-      if (!pageWithLayout) {
+      if (!fullPageData) {
         return c.json({
           success: false,
           error: 'Page not found'
         }, 404)
       }
-
-      const [pageContent, pageCollectionData] = await Promise.all([
-        cmsService.getPageContentBySlug(websiteId, slug),
-        cmsService.getPageCollectionData(pageWithLayout.page.id)
-      ])
-
-      if (!pageContent) {
-        return c.json({
-          success: false,
-          error: 'Page not found'
-        }, 404)
-      }
-
-      const collectionSectionsById = new Map(
-        pageCollectionData.sections.map((section) => [section.id, section])
-      )
 
       return c.json({
         success: true,
-        data: {
-          page: pageContent.page,
-          sections: pageContent.sections.map((section) => {
-            const collectionSection = collectionSectionsById.get(section.id)
-
-            return {
-              ...section,
-              fields: collectionSection?.fields ?? section.fields,
-              collectionEntry: collectionSection?.collectionEntry ?? null,
-              collection: collectionSection?.collection ?? null,
-            }
-          }),
-          layout: pageWithLayout.layout
-        }
+        data: fullPageData
       })
     } catch (error) {
       console.error('Error fetching full page data by slug:', error)
@@ -227,6 +198,59 @@ cmsRoutes.get(
       return c.json({
         success: false,
         error: 'Failed to fetch page layout'
+      }, 500)
+    }
+  }
+)
+
+// Get page layout data by slug
+cmsRoutes.get(
+  '/websites/:websiteId/pages/slug/:slug/layout',
+  zValidator('param', pageBySlugParamsSchema),
+  async (c) => {
+    try {
+      const { websiteId, slug } = c.req.valid('param')
+      const pageLayout = await cmsService.getPageWithLayoutBySlug(websiteId, slug)
+
+      if (!pageLayout) {
+        return c.json({
+          success: false,
+          error: 'Page not found'
+        }, 404)
+      }
+
+      return c.json({
+        success: true,
+        data: pageLayout
+      })
+    } catch (error) {
+      console.error('Error fetching page layout by slug:', error)
+      return c.json({
+        success: false,
+        error: 'Failed to fetch page layout'
+      }, 500)
+    }
+  }
+)
+
+// Get default layouts for a website
+cmsRoutes.get(
+  '/websites/:websiteId/default-layouts',
+  zValidator('param', websiteParamsSchema),
+  async (c) => {
+    try {
+      const { websiteId } = c.req.valid('param')
+      const defaultLayouts = await cmsService.getDefaultLayouts(websiteId)
+
+      return c.json({
+        success: true,
+        data: defaultLayouts
+      })
+    } catch (error) {
+      console.error('Error fetching default layouts:', error)
+      return c.json({
+        success: false,
+        error: 'Failed to fetch default layouts'
       }, 500)
     }
   }

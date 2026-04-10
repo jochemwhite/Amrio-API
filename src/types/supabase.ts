@@ -161,6 +161,91 @@ export type Database = {
           },
         ]
       }
+      cms_collection_entry_metadata: {
+        Row: {
+          canonical_url: string | null
+          created_at: string
+          description: string | null
+          entry_id: string
+          id: string
+          keywords: string[] | null
+          og_description: string | null
+          og_image_alt: string | null
+          og_image_file_id: string | null
+          og_title: string | null
+          robots: string
+          schema_org: Json | null
+          title: string | null
+          twitter_card: string
+          twitter_description: string | null
+          twitter_image_file_id: string | null
+          twitter_title: string | null
+          updated_at: string
+        }
+        Insert: {
+          canonical_url?: string | null
+          created_at?: string
+          description?: string | null
+          entry_id: string
+          id?: string
+          keywords?: string[] | null
+          og_description?: string | null
+          og_image_alt?: string | null
+          og_image_file_id?: string | null
+          og_title?: string | null
+          robots?: string
+          schema_org?: Json | null
+          title?: string | null
+          twitter_card?: string
+          twitter_description?: string | null
+          twitter_image_file_id?: string | null
+          twitter_title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          canonical_url?: string | null
+          created_at?: string
+          description?: string | null
+          entry_id?: string
+          id?: string
+          keywords?: string[] | null
+          og_description?: string | null
+          og_image_alt?: string | null
+          og_image_file_id?: string | null
+          og_title?: string | null
+          robots?: string
+          schema_org?: Json | null
+          title?: string | null
+          twitter_card?: string
+          twitter_description?: string | null
+          twitter_image_file_id?: string | null
+          twitter_title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cms_collection_entry_metadata_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: true
+            referencedRelation: "cms_collection_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_collection_entry_metadata_og_image_file_id_fkey"
+            columns: ["og_image_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_collection_entry_metadata_twitter_image_file_id_fkey"
+            columns: ["twitter_image_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cms_collections: {
         Row: {
           created_at: string
@@ -298,6 +383,7 @@ export type Database = {
           order: number | null
           page_id: string | null
           schema_section_id: string | null
+          type: string
           updated_at: string | null
         }
         Insert: {
@@ -310,6 +396,7 @@ export type Database = {
           order?: number | null
           page_id?: string | null
           schema_section_id?: string | null
+          type?: string
           updated_at?: string | null
         }
         Update: {
@@ -322,6 +409,7 @@ export type Database = {
           order?: number | null
           page_id?: string | null
           schema_section_id?: string | null
+          type?: string
           updated_at?: string | null
         }
         Relationships: [
@@ -621,6 +709,91 @@ export type Database = {
           },
         ]
       }
+      cms_page_metadata: {
+        Row: {
+          canonical_url: string | null
+          created_at: string
+          description: string | null
+          id: string
+          keywords: string[] | null
+          og_description: string | null
+          og_image_alt: string | null
+          og_image_file_id: string | null
+          og_title: string | null
+          page_id: string
+          robots: string
+          schema_org: Json | null
+          title: string | null
+          twitter_card: string
+          twitter_description: string | null
+          twitter_image_file_id: string | null
+          twitter_title: string | null
+          updated_at: string
+        }
+        Insert: {
+          canonical_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          keywords?: string[] | null
+          og_description?: string | null
+          og_image_alt?: string | null
+          og_image_file_id?: string | null
+          og_title?: string | null
+          page_id: string
+          robots?: string
+          schema_org?: Json | null
+          title?: string | null
+          twitter_card?: string
+          twitter_description?: string | null
+          twitter_image_file_id?: string | null
+          twitter_title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          canonical_url?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          keywords?: string[] | null
+          og_description?: string | null
+          og_image_alt?: string | null
+          og_image_file_id?: string | null
+          og_title?: string | null
+          page_id?: string
+          robots?: string
+          schema_org?: Json | null
+          title?: string | null
+          twitter_card?: string
+          twitter_description?: string | null
+          twitter_image_file_id?: string | null
+          twitter_title?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cms_page_metadata_og_image_file_id_fkey"
+            columns: ["og_image_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_page_metadata_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: true
+            referencedRelation: "cms_pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_page_metadata_twitter_image_file_id_fkey"
+            columns: ["twitter_image_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cms_pages: {
         Row: {
           created_at: string | null
@@ -763,6 +936,7 @@ export type Database = {
           name: string
           order: number | null
           schema_id: string
+          type: string
           updated_at: string | null
         }
         Insert: {
@@ -772,6 +946,7 @@ export type Database = {
           name: string
           order?: number | null
           schema_id?: string
+          type?: string
           updated_at?: string | null
         }
         Update: {
@@ -781,6 +956,7 @@ export type Database = {
           name?: string
           order?: number | null
           schema_id?: string
+          type?: string
           updated_at?: string | null
         }
         Relationships: [
