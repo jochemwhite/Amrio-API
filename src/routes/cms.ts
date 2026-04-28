@@ -272,7 +272,7 @@ cmsRoutes.get(
         }, 404)
       }
 
-      const collectionData = await cmsService.getPageCollectionData(pageId)
+      const collectionData = await cmsService.getPageCollectionData(pageId, websiteId)
 
       return c.json({
         success: true,

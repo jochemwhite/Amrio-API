@@ -485,6 +485,7 @@ export type Database = {
           id: string
           name: string
           published: boolean
+          settings: Json | null
           share_url: string
           submissions: number
           tenant_id: string
@@ -501,6 +502,7 @@ export type Database = {
           id?: string
           name: string
           published?: boolean
+          settings?: Json | null
           share_url?: string
           submissions?: number
           tenant_id: string
@@ -517,6 +519,7 @@ export type Database = {
           id?: string
           name?: string
           published?: boolean
+          settings?: Json | null
           share_url?: string
           submissions?: number
           tenant_id?: string
@@ -861,6 +864,7 @@ export type Database = {
           created_at: string
           default_value: string | null
           field_key: string
+          form_id: string | null
           id: string
           name: string
           order: number
@@ -877,6 +881,7 @@ export type Database = {
           created_at?: string
           default_value?: string | null
           field_key: string
+          form_id?: string | null
           id?: string
           name: string
           order?: number
@@ -893,6 +898,7 @@ export type Database = {
           created_at?: string
           default_value?: string | null
           field_key?: string
+          form_id?: string | null
           id?: string
           name?: string
           order?: number
@@ -910,6 +916,13 @@ export type Database = {
             columns: ["collection_id"]
             isOneToOne: false
             referencedRelation: "cms_collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cms_schema_fields_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "cms_forms"
             referencedColumns: ["id"]
           },
           {
@@ -1280,6 +1293,58 @@ export type Database = {
             columns: ["website_id"]
             isOneToOne: false
             referencedRelation: "cms_websites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      form_notification_preferences: {
+        Row: {
+          created_at: string
+          form_id: string
+          id: string
+          notify_email: boolean
+          notify_email_address: string | null
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          form_id: string
+          id?: string
+          notify_email?: boolean
+          notify_email_address?: string | null
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          form_id?: string
+          id?: string
+          notify_email?: boolean
+          notify_email_address?: string | null
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "form_notification_preferences_form_id_fkey"
+            columns: ["form_id"]
+            isOneToOne: false
+            referencedRelation: "cms_forms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_notification_preferences_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "form_notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -1681,6 +1746,7 @@ export type Database = {
         | "button"
         | "social_media"
         | "navigation_menu"
+        | "contact_form"
       global_roles: "default_user" | "system_admin"
       layout_slot_type: "header" | "footer" | "sidebar" | "custom"
       page_status: "draft" | "active" | "archived"
@@ -1842,6 +1908,7 @@ export const Constants = {
         "button",
         "social_media",
         "navigation_menu",
+        "contact_form",
       ],
       global_roles: ["default_user", "system_admin"],
       layout_slot_type: ["header", "footer", "sidebar", "custom"],

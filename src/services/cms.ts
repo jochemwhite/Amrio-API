@@ -7,6 +7,7 @@ type CmsContentSection = Tables<'cms_content_sections'>
 type CmsContentField = Tables<'cms_content_fields'>
 type CmsCollection = Tables<'cms_collections'>
 type CmsCollectionEntry = Tables<'cms_collection_entries'>
+type CmsForm = Tables<'cms_forms'>
 type CmsPageMetadata = Tables<'cms_page_metadata'>
 type CmsSchemaField = Tables<'cms_schema_fields'>
 type CmsSchemaSection = Tables<'cms_schema_sections'>
@@ -35,8 +36,9 @@ type CmsLayoutOverrideRow = CmsLayoutOverride & {
 
 type PageSummary = Pick<CmsPage, 'id' | 'slug' | 'name' | 'status'>
 type LayoutSummary = Pick<CmsLayout, 'id' | 'name'>
-type ContentFieldResponse = Pick<CmsContentField, 'id' | 'type' | 'order'> & {
-  content: CmsContentField['content'] | ContentSectionResponse[]
+type ContentFieldResponse = Pick<CmsContentField, 'id' | 'order'> & {
+  type: CmsContentField['type'] | 'form'
+  content: CmsContentField['content'] | ContentSectionResponse[] | ContactFormMetadata
   field_key: string | null
 }
 type ContentSectionResponse = {
@@ -57,6 +59,7 @@ type PageSection = CmsContentSection & {
 }
 
 type PageCollectionSection = CmsContentSection & {
+  schemaSection?: CmsSchemaSection | null
   fields: SectionField[]
   collectionEntry?: CmsCollectionEntry | null
   collection?: CmsCollection | null
@@ -78,6 +81,23 @@ type ReferenceFieldConfig = {
   collectionId: string
   entryIds: string[]
   includeAll: boolean
+}
+
+type WebsiteScope = {
+  websiteId: string
+  tenantId: string
+}
+
+type ContactFormMetadata = Pick<CmsForm, 'id' | 'name' | 'published' | 'description' | 'content' | 'share_url' | 'settings'>
+
+type ContactFormFieldConfig = {
+  fieldId: string
+  formId: string
+}
+
+type FieldResolutionContext = {
+  referenceContentByFieldId: Map<string, ContentSectionResponse[]>
+  formByFieldId: Map<string, ContactFormMetadata>
 }
 
 const PAGE_SELECT = `
@@ -107,6 +127,27 @@ function getSingleRelation<T>(value: T | T[] | null | undefined): T | null {
 
 function createEmptyResult<T>() {
   return Promise.resolve({ data: [] as T[], error: null })
+}
+
+async function getWebsiteScope(websiteId: string): Promise<WebsiteScope | null> {
+  const { data, error } = await supabase
+    .from('cms_websites')
+    .select('id, tenant_id')
+    .eq('id', websiteId)
+    .maybeSingle()
+
+  if (error) {
+    throw error
+  }
+
+  if (!data) {
+    return null
+  }
+
+  return {
+    websiteId: data.id,
+    tenantId: data.tenant_id,
+  }
 }
 
 function normalizeRouteCandidates(slug: string) {
@@ -247,6 +288,7 @@ async function getLayoutEntriesByWebsite(websiteId: string, options?: { pageId?:
     .from('cms_content_sections')
     .select(`
       *,
+      cms_schema_sections (*),
       cms_content_fields:cms_content_fields!cms_content_fields_section_id_fkey (
         *,
         cms_schema_fields (*)
@@ -283,6 +325,7 @@ async function getLayoutEntriesByWebsite(websiteId: string, options?: { pageId?:
     })
     .map((section) => ({
       ...section,
+      schemaSection: getSingleRelation(section.cms_schema_sections),
       fields: (Array.isArray(section.cms_content_fields) ? section.cms_content_fields : [])
         .map(mapSectionField)
         .sort((a: SectionField, b: SectionField) => (a.order ?? 0) - (b.order ?? 0)),
@@ -311,11 +354,13 @@ async function getLayoutEntriesByWebsite(websiteId: string, options?: { pageId?:
     const pageSpecificSections = entrySections.filter((section) => section.page_id === options.pageId)
     return pageSpecificSections.length > 0 ? pageSpecificSections : entrySections
   })
+  const selectedSectionsWithLinkedForms = await includeLinkedContactFormFields(selectedSections)
 
-  const resolvedReferenceContentByFieldId = await resolveReferenceFieldContent(selectedSections)
+  const websiteScope = await getWebsiteScope(websiteId)
+  const fieldResolutionContext = await resolveFieldContext(selectedSectionsWithLinkedForms, websiteScope)
   const entriesById = new Map<string, PageLayoutEntry>()
 
-  for (const section of selectedSections) {
+  for (const section of selectedSectionsWithLinkedForms) {
     const layoutEntryId = section.layout_entry_id
 
     if (!layoutEntryId) {
@@ -324,7 +369,7 @@ async function getLayoutEntriesByWebsite(websiteId: string, options?: { pageId?:
 
     const relatedEntry = getSingleRelation(section.cms_layout_entries)
     const existingEntry = entriesById.get(layoutEntryId)
-    const mappedSection = mapContentSection(section, resolvedReferenceContentByFieldId)
+    const mappedSection = mapContentSection(section, fieldResolutionContext)
 
     if (existingEntry) {
       existingEntry.sections.push(mappedSection)
@@ -366,6 +411,94 @@ function mapPageSections(page: CmsPageRow): PageSection[] {
       .map(mapSectionField)
       .sort((a: SectionField, b: SectionField) => (a.order ?? 0) - (b.order ?? 0)),
   })).sort((a: PageSection, b: PageSection) => (a.order ?? 0) - (b.order ?? 0))
+}
+
+function createSyntheticContactFormField(sectionId: string, schemaField: CmsSchemaField): SectionField {
+  return {
+    id: `schema-${schemaField.id}-${sectionId}`,
+    section_id: sectionId,
+    schema_field_id: schemaField.id,
+    type: schemaField.type,
+    name: schemaField.name,
+    order: schemaField.order,
+    content: null,
+    collection_id: schemaField.collection_id,
+    parent_field_id: schemaField.parent_field_id,
+    created_at: null,
+    updated_at: null,
+    schemaField,
+  }
+}
+
+async function includeLinkedContactFormFields<T extends { id: string; schemaSection?: CmsSchemaSection | null; fields: SectionField[] }>(
+  sections: T[]
+): Promise<T[]> {
+  const schemaSectionIds = Array.from(new Set(
+    sections
+      .map((section) => section.schemaSection?.id)
+      .filter((schemaSectionId): schemaSectionId is string => Boolean(schemaSectionId))
+  ))
+
+  if (schemaSectionIds.length === 0) {
+    return sections
+  }
+
+  const { data, error } = await supabase
+    .from('cms_schema_fields')
+    .select('*')
+    .in('schema_section_id', schemaSectionIds)
+    .eq('type', 'contact_form')
+    .not('form_id', 'is', null)
+    .order('order', { ascending: true })
+
+  if (error) {
+    throw error
+  }
+
+  if (!data || data.length === 0) {
+    return sections
+  }
+
+  const schemaFieldsBySectionId = new Map<string, CmsSchemaField[]>()
+
+  for (const schemaField of data as CmsSchemaField[]) {
+    const existingFields = schemaFieldsBySectionId.get(schemaField.schema_section_id) ?? []
+    existingFields.push(schemaField)
+    schemaFieldsBySectionId.set(schemaField.schema_section_id, existingFields)
+  }
+
+  return sections.map((section) => {
+    const schemaSectionId = section.schemaSection?.id
+
+    if (!schemaSectionId) {
+      return section
+    }
+
+    const linkedContactSchemaFields = schemaFieldsBySectionId.get(schemaSectionId) ?? []
+
+    if (linkedContactSchemaFields.length === 0) {
+      return section
+    }
+
+    const existingSchemaFieldIds = new Set(
+      section.fields
+        .map((field) => field.schemaField?.id)
+        .filter((schemaFieldId): schemaFieldId is string => Boolean(schemaFieldId))
+    )
+
+    const injectedFields = linkedContactSchemaFields
+      .filter((schemaField) => !existingSchemaFieldIds.has(schemaField.id))
+      .map((schemaField) => createSyntheticContactFormField(section.id, schemaField))
+
+    if (injectedFields.length === 0) {
+      return section
+    }
+
+    return {
+      ...section,
+      fields: [...section.fields, ...injectedFields].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    }
+  })
 }
 
 function getReferenceFieldConfig(field: SectionField): ReferenceFieldConfig | null {
@@ -566,6 +699,81 @@ async function resolveReferenceFieldContent(sections: Array<{ fields: SectionFie
   return resolvedContentByFieldId
 }
 
+function getContactFormFieldConfig(field: SectionField): ContactFormFieldConfig | null {
+  if (field.schemaField?.type !== 'contact_form' || !field.schemaField.form_id) {
+    return null
+  }
+
+  return {
+    fieldId: field.id,
+    formId: field.schemaField.form_id,
+  }
+}
+
+async function resolveContactFormContent(
+  sections: Array<{ fields: SectionField[] }>,
+  websiteScope: WebsiteScope | null
+) {
+  if (!websiteScope) {
+    return new Map<string, ContactFormMetadata>()
+  }
+
+  const formConfigs = sections
+    .flatMap((section) => section.fields)
+    .map((field) => getContactFormFieldConfig(field))
+    .filter((config): config is ContactFormFieldConfig => Boolean(config))
+
+  if (formConfigs.length === 0) {
+    return new Map<string, ContactFormMetadata>()
+  }
+
+  const formIds = Array.from(new Set(formConfigs.map((config) => config.formId)))
+  const { data, error } = await supabase
+    .from('cms_forms')
+    .select('id, name, published, description, content, share_url, settings')
+    .eq('tenant_id', websiteScope.tenantId)
+    .eq('website_id', websiteScope.websiteId)
+    .is('archived_at', null)
+    .in('id', formIds)
+
+  if (error) {
+    throw error
+  }
+
+  const formsById = new Map<string, ContactFormMetadata>()
+
+  for (const form of (data ?? []) as ContactFormMetadata[]) {
+    formsById.set(form.id, form)
+  }
+
+  const formByFieldId = new Map<string, ContactFormMetadata>()
+
+  for (const config of formConfigs) {
+    const form = formsById.get(config.formId)
+
+    if (form) {
+      formByFieldId.set(config.fieldId, form)
+    }
+  }
+
+  return formByFieldId
+}
+
+async function resolveFieldContext(
+  sections: Array<{ fields: SectionField[] }>,
+  websiteScope: WebsiteScope | null
+): Promise<FieldResolutionContext> {
+  const [referenceContentByFieldId, formByFieldId] = await Promise.all([
+    resolveReferenceFieldContent(sections),
+    resolveContactFormContent(sections, websiteScope),
+  ])
+
+  return {
+    referenceContentByFieldId,
+    formByFieldId,
+  }
+}
+
 function mapPageSummary(page: CmsPage): PageSummary {
   return {
     id: page.id,
@@ -586,11 +794,26 @@ function mapLayoutSummary(layout: CmsLayout | null): LayoutSummary | null {
   }
 }
 
-function mapContentField(field: CmsContentField | SectionField, resolvedReferenceContentByFieldId?: Map<string, ContentSectionResponse[]>): ContentFieldResponse {
+function mapContentField(
+  field: CmsContentField | SectionField,
+  fieldResolutionContext?: FieldResolutionContext
+): ContentFieldResponse {
+  const resolvedForm = fieldResolutionContext?.formByFieldId.get(field.id)
+
+  if (resolvedForm) {
+    return {
+      id: field.id,
+      type: 'form',
+      content: resolvedForm,
+      order: field.order,
+      field_key: 'schemaField' in field ? field.schemaField?.field_key ?? null : null,
+    }
+  }
+
   return {
     id: field.id,
     type: field.type,
-    content: resolvedReferenceContentByFieldId?.get(field.id) ?? field.content,
+    content: fieldResolutionContext?.referenceContentByFieldId.get(field.id) ?? field.content,
     order: field.order,
     field_key: 'schemaField' in field ? field.schemaField?.field_key ?? null : null,
   }
@@ -598,7 +821,7 @@ function mapContentField(field: CmsContentField | SectionField, resolvedReferenc
 
 function mapContentSection(
   section: { id: string; name: string; type?: string | null; order: number | null; fields: CmsContentField[] | SectionField[] },
-  resolvedReferenceContentByFieldId?: Map<string, ContentSectionResponse[]>
+  fieldResolutionContext?: FieldResolutionContext
 ): ContentSectionResponse {
   return {
     id: section.id,
@@ -606,12 +829,12 @@ function mapContentSection(
     type: section.type ?? 'section',
     order: section.order,
     fields: section.fields
-      .map((field) => mapContentField(field, resolvedReferenceContentByFieldId))
+      .map((field) => mapContentField(field, fieldResolutionContext))
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
   }
 }
 
-async function getCollectionEntrySections(entryId: string) {
+async function getCollectionEntrySections(entryId: string, websiteScope: WebsiteScope | null) {
   const { data, error } = await supabase
     .from('cms_content_sections')
     .select(`
@@ -637,9 +860,9 @@ async function getCollectionEntrySections(entryId: string) {
     }))
     .sort((a: PageCollectionSection, b: PageCollectionSection) => (a.order ?? 0) - (b.order ?? 0))
 
-  const resolvedReferenceContentByFieldId = await resolveReferenceFieldContent(sections)
+  const fieldResolutionContext = await resolveFieldContext(sections, websiteScope)
 
-  return sections.map((section) => mapContentSection(section, resolvedReferenceContentByFieldId))
+  return sections.map((section) => mapContentSection(section, fieldResolutionContext))
 }
 
 export const cmsService = {
@@ -673,12 +896,15 @@ export const cmsService = {
       throw error
     }
 
-    const pageSections = mapPageSections(data)
-    const resolvedReferenceContentByFieldId = await resolveReferenceFieldContent(pageSections)
+    const pageSections = await includeLinkedContactFormFields(mapPageSections(data))
+    const websiteScope: WebsiteScope | null = data.tenant_id
+      ? { websiteId, tenantId: data.tenant_id }
+      : await getWebsiteScope(websiteId)
+    const fieldResolutionContext = await resolveFieldContext(pageSections, websiteScope)
 
     return {
       page: mapPageSummary(data),
-      sections: pageSections.map((section) => mapContentSection(section, resolvedReferenceContentByFieldId)),
+      sections: pageSections.map((section) => mapContentSection(section, fieldResolutionContext)),
     }
   },
 
@@ -770,7 +996,8 @@ export const cmsService = {
     }
 
     const { cms_collections: _cmsCollections, ...entryData } = entry
-    const sections = await getCollectionEntrySections(entry.id)
+    const websiteScope = await getWebsiteScope(websiteId)
+    const sections = await getCollectionEntrySections(entry.id, websiteScope)
 
     return {
       entry: entryData,
@@ -831,10 +1058,13 @@ export const cmsService = {
     }
   },
 
-  async getPageCollectionData(pageId: string) {
+  async getPageCollectionData(pageId: string, websiteId: string) {
     const { data: sections, error: sectionsError } = await supabase
       .from('cms_content_sections')
-      .select('*')
+      .select(`
+        *,
+        cms_schema_sections (*)
+      `)
       .eq('page_id', pageId)
       .order('order', { ascending: true })
 
@@ -905,17 +1135,20 @@ export const cmsService = {
 
       return {
         ...section,
+        schemaSection: getSingleRelation(section.cms_schema_sections),
         fields: (fieldsBySection.get(section.id) ?? []).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
         collectionEntry: collectionData?.entry ?? null,
         collection: collectionData?.collection ?? null,
       }
     })
+    const mappedSectionsWithLinkedForms = await includeLinkedContactFormFields(mappedSections)
 
-    const resolvedReferenceContentByFieldId = await resolveReferenceFieldContent(mappedSections)
+    const websiteScope = await getWebsiteScope(websiteId)
+    const fieldResolutionContext = await resolveFieldContext(mappedSectionsWithLinkedForms, websiteScope)
 
     return {
-      sections: mappedSections.map((section) => ({
-        ...mapContentSection(section, resolvedReferenceContentByFieldId),
+      sections: mappedSectionsWithLinkedForms.map((section) => ({
+        ...mapContentSection(section, fieldResolutionContext),
         collectionEntry: section.collectionEntry ?? null,
         collection: section.collection ?? null,
       })),
@@ -926,7 +1159,7 @@ export const cmsService = {
     const [pageContent, pageWithLayout, pageCollectionData, metadata] = await Promise.all([
       this.getPageContent(websiteId, pageId),
       this.getPageWithLayout(websiteId, pageId),
-      this.getPageCollectionData(pageId),
+      this.getPageCollectionData(pageId, websiteId),
       getPageMetadata(pageId),
     ])
 

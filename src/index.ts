@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { cmsRoutes } from "./routes/cms";
+import { formRoutes } from "./routes/forms";
 import { env } from "./lib/env";
 import { rateLimit } from "./middleware/rateLimit";
 import { apiKeyAuth } from "./middleware/auth";
@@ -56,6 +57,7 @@ app.get("/", (c) => {
 
 // Mount CMS routes
 app.route("/api/cms", cmsRoutes);
+app.route("/api/cms", formRoutes);
 
 Bun.serve({
   fetch: app.fetch,
